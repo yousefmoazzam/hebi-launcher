@@ -1,0 +1,5 @@
+flask==1.1.2
+flask_cors==3.0.10
+requests==2.25.1
+ldap3==2.9
+pyjwt==2.1.0

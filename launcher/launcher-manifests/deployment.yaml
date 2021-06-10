@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hebi-launcher
+  namespace: twi18192
+spec:
+  selector:
+    matchLabels:
+      app: hebi-launcher
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: hebi-launcher
+    spec:
+      securityContext:
+        runAsUser: 1207386
+        runAsGroup: 1207386
+      # all volume mounts here are only for testing
+      volumes:
+        - name: launcher-code
+          hostPath:
+            path: /home/twi18192/wc/hebi-launcher/launcher
+            type: Directory
+        - name: cas-auth-code
+          hostPath:
+            path: /home/twi18192/wc/hebi-launcher/cas-auth
+            type: Directory
+        - name: nginx-conf-dir
+          hostPath:
+            path: /home/twi18192/wc/hebi-launcher/nginx/nginx-confs
+            type: Directory
+        - name: web-app-code
+          hostPath:
+            path: /home/twi18192/wc/hebi-launcher/nginx
+            type: Directory
+      containers:
+        - name: launcher
+          image: gcr.io/diamond-pubreg/hebi/flask-launcher/launcher:k8s-test-rename-hebi-templates
+    #      command: ["python3.7"]
+    #      args: ["launcher.py"]
+          command: ["/bin/sh"]
+          args: ["-c", "while true; do sleep 10; done"]
+          ports:
+            - containerPort: 8085
+          env:
+            - name: IN_CLUSTER
+              value: 'True'
+            - name: JWT_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: cas-secret
+                  key: jwt-key
+          imagePullPolicy: Always
+          # only for testing
+          volumeMounts:
+            - mountPath: /app
+              name: launcher-code
+              mountPropagation: HostToContainer
+        - name: cas-auth
+          image: gcr.io/diamond-pubreg/hebi/flask-launcher/cas-auth:k8s-test-jwt-secret
+    #      command: ["python3.7"]
+    #      args: ["cas-auth.py"]
+          command: ["/bin/sh"]
+          args: ["-c", "while true; do sleep 10; done"]
+          ports:
+            - containerPort: 8086
+          imagePullPolicy: Always
+          # only for testing
+          volumeMounts:
+            - mountPath: /app
+              name: cas-auth-code
+              mountPropagation: HostToContainer
+          env:
+            - name: JWT_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: cas-secret
+                  key: jwt-key
+        - name: nginx
+          image: gcr.io/diamond-pubreg/hebi/flask-launcher/nginx:k8s-test-socketio
+          command: ["/bin/sh"]
+          args: ["-c", "while true; do sleep 10; done"]
+          ports:
+            - containerPort: 8080
+          imagePullPolicy: Always
+          # only for testing
+          volumeMounts:
+            - mountPath: /etc/nginx/conf.d
+              name: nginx-conf-dir
+              mountPropagation: HostToContainer
+            - mountPath: /var/cache/nginx/
+              name: web-app-code
+              mountPropagation: HostToContainer

@@ -1,0 +1,109 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hebi-{{ fedid }}
+  namespace: twi18192
+spec:
+  selector:
+    matchLabels:
+      app: hebi-{{ fedid }}
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: hebi-{{ fedid }}
+    spec:
+      securityContext:
+        runAsUser: {{ uid }}
+        runAsGroup: {{ gid }}
+      volumes:
+        - name: dls
+          hostPath:
+            path: /dls
+            type: Directory
+        - name: home
+          hostPath:
+            path: /home
+            type: Directory
+        - name: custom-savu
+          hostPath:
+            # my own Savu repo, for testing
+            path: /dls/science/users/twi18192/Savu_param_k8s
+            type: Directory
+        - name: custom-hebi-web
+          hostPath:
+            # my own hebi-web repo, for testing
+            path: /home/twi18192/wc/hebi/web/config/www
+            type: Directory
+      containers:
+        - name: api
+          image: gcr.io/diamond-pubreg/hebi/api:k8s-test
+          command: ["/bin/bash"]
+          args: ["/webservice/run_lite.sh"]
+          securityContext:
+            privileged: false
+          ports:
+            - containerPort: 5000
+          volumeMounts:
+            - mountPath: /files/dls
+              name: dls
+              mountPropagation: HostToContainer
+            - mountPath: /files/home
+              name: home
+              mountPropagation: HostToContainer
+              # for testing only
+            - mountPath: /custom-savu
+              name: custom-savu
+              mountPropagation: HostToContainer
+          env:
+            - name: SAVUHOME
+              value: /custom-savu
+          imagePullPolicy: Always
+        - name: web
+          image: gcr.io/diamond-pubreg/hebi/web:k8s-test
+          command: ["/bin/sh"]
+          args: ["/entrypoint-k8s.sh"]
+          ports:
+            - containerPort: 8080
+          env:
+            - name: FEDID
+              value: {{ fedid }}
+          imagePullPolicy: Always
+          # for testing only
+          volumeMounts:
+            - mountPath: /var/cache/nginx/config/www
+              name: custom-hebi-web
+              mountPropagation: HostToContainer
+        - name: file-browser-server
+          image: gcr.io/diamond-pubreg/hebi/file-browser-server:k8s-test
+          command: ["npm"]
+          args: ["start"]
+          ports:
+            - containerPort: 8081
+          securityContext:
+            privileged: false
+          volumeMounts:
+            - mountPath: /files/dls
+              name: dls
+              mountPropagation: HostToContainer
+            - mountPath: /files/home
+              name: home
+              mountPropagation: HostToContainer
+          imagePullPolicy: Always
+        - name: cas-authenticator
+          image: gcr.io/diamond-pubreg/hebi/cas-authenticator:k8s-test
+          command: ["python3.7"]
+          args: ["cas-authenticator.py"]
+          ports:
+            - containerPort: 8090
+          securityContext:
+            privileged: false
+          env:
+            - name: FEDID
+              value: {{ fedid }}
+            - name: JWT_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: cas-secret
+                  key: jwt-key
+          imagePullPolicy: Always

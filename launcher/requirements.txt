@@ -1,0 +1,9 @@
+kubernetes==12.0.1
+flask==1.1.2
+flask_cors==3.0.10
+jinja2==2.11.3
+pyjwt==2.1.0
+ldap3==2.9
+Flask-SocketIO==5.0.1
+gevent==21.1.2
+gevent-websocket==0.10.1
