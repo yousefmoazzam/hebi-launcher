@@ -40,9 +40,9 @@ k8s_api_networking_v1beta1 = None
 # loader for loading templates with jinja2
 env = Environment(loader=FileSystemLoader('hebi-manifest-templates'))
 
-# for UID lookup
-ldap_server = 'ldap://ldap.diamond.ac.uk'
-server = Server(ldap_server, get_info=ALL)
+# for performing LDAP queries that get info about the user requesting a session
+ldap_server_url = 'ldap://ldap.diamond.ac.uk'
+ldap_server = Server(ldap_server_url, get_info=ALL)
 
 # for decrypting the JWT in the browser cookie for requests coming from the
 # launcher web app (rather than from SynchWeb)
@@ -252,28 +252,60 @@ def remove_route_from_ingress(ingress_config, fedid):
         print("Exception when calling ExtensionsV1beta1Api->patch_namespaced_ingress: %s\n" % ae)
 
 
-def get_user_uid(fedid):
+def get_user_ldap_info(fedid):
     '''
-    Get a user's UID, given their FedID, via an LDAP lookup
+    Collect some info about the requestor using LDAP queries to ensure that the
+    user is:
+    - either a member of the dls_staff group, or a visit user (no check
+      implemented for this yet)
+    - not root
+    - not a member of the dls_sysadmin group
+    - not a member of the functional_accounts group
     '''
 
-    resp = {
-        'is_uid_lookup_successful': False        
-    }
+    user_info = {}
 
-    dn = 'uid=' + fedid + ',ou=people,dc=diamond,dc=ac,dc=uk'
-
-    conn = Connection(server)
+    uid_search_dn = 'ou=people,dc=diamond,dc=ac,dc=uk'
+    uid_search_filter = '(uid=' + fedid + ')'
+    uid_search_attrs = ['uidNumber']
+    group_search_dn = 'ou=group,dc=diamond,dc=ac,dc=uk'
+    group_search_attrs = ['memberUid']
+    conn = Connection(ldap_server)
 
     if conn.bind() is True:
-        # search for the given fedid
-        result = conn.search(dn, '(objectclass=person)', attributes=['uidNumber'])
-        resp['is_uid_lookup_successful'] = True
-        resp['uid'] = conn.entries[0]['uidNumber']
-    else:
-        print('failed authentication: %s' % conn.result)
+        # get user's UID
+        uid_search_res = conn.search(uid_search_dn,
+            uid_search_filter,
+            attributes=uid_search_attrs)
+        user_info['uid'] = conn.entries[0]['uidNumber'].value
+        user_info['is_uid_root'] = (user_info['uid'] == 0)
 
-    return resp
+        # check if the user is a member of dls_staff
+        dls_staff_search_res = conn.search(group_search_dn,
+            '(cn=dls_staff)',
+            attributes=group_search_attrs)
+        user_info['is_dls_staff_member'] = \
+            fedid in conn.entries[0]['memberUid'].value
+
+        # check if the user is a member of dls_sysadmin
+        dls_sysadmin_search_res = conn.search(group_search_dn,
+            '(cn=dls_sysadmin)',
+            attributes=group_search_attrs)
+        user_info['is_dls_sysadmin_member'] = \
+            fedid in conn.entries[0]['memberUid'].value
+
+        # check if the user is a member of functional_accounts
+        function_accounts_search_res = conn.search(group_search_dn,
+            '(cn=functional_accounts)',
+            attributes=group_search_attrs)
+        user_info['is_functional_accounts_member'] = \
+            fedid in conn.entries[0]['memberUid'].value
+    else:
+        print('failed ldap server bind: %s' % conn.result)
+
+    conn.unbind()
+
+    return user_info
 
 
 @socketio.on('session-connect')
@@ -418,12 +450,32 @@ def start_hebi():
     else:
         fedid = data['fedid']
 
-    # check if UID is in request or not; if not, do an LDAP search for it with
-    # the FedID
+    user_ldap_info = get_user_ldap_info(fedid)
+
+    # perform some checks on the requestor before a Hebi session is allowed to
+    # be launched for them
+    is_valid_user = user_ldap_info['is_dls_staff_member'] \
+        and not user_ldap_info['is_uid_root'] \
+        and not user_ldap_info['is_dls_sysadmin_member'] \
+        and not user_ldap_info['is_functional_accounts_member']
+
+    if not is_valid_user:
+        # don't launch a session, and report back to the launcher web app with
+        # the ldap info for debugging
+        response = {
+            'username': fedid,
+            'was_session_launched': False,
+            'message': 'Invalid user, see user_ldap_info for more info',
+            'user_ldap_info': user_ldap_info
+        }
+        return json.dumps(response)
+
+    # otherwise, if is_valid_user is true, then a session for the user can be
+    # launched
+
+    # check if UID is in request or not; if not, grab it from user_ldap_info
     if 'uid' not in data:
-        uid_search = get_user_uid(fedid)
-        if uid_search['is_uid_lookup_successful']:
-            uid = uid_search['uid']
+        uid = user_ldap_info['uid']
     else:
         uid = data['uid']
 
@@ -562,7 +614,7 @@ def delete_hebi_k8s_resources(fedid):
 
 def main(argv):
     global IN_CLUSTER, k8s_apps_v1, k8s_api_v1, k8s_api_networking_v1beta1, \
-        env, server, all_sessions_activity, thread_lock
+        env, ldap_server, all_sessions_activity, thread_lock
 
     IN_CLUSTER = os.environ['IN_CLUSTER']
 

@@ -27,6 +27,18 @@
         class="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-900 ml-2">
       </svg> 
     </div>
+    <div>
+      <div v-for="ldapErrorMessage in sessionLaunchLdapErrorMessages"
+        v-if="ldapErrorMessage !== ''"
+        class="flex justify-center">
+        <span class="px-1">
+          <i class="fas fa-exclamation-triangle text-red-600"></i>
+        </span>
+        <p>
+          {{ ldapErrorMessage }}
+        </p>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -59,7 +71,13 @@ export default {
       additionalMessage: '',
       fetchingUserSessionStatus: true,
       isSessionLaunching: false,
-      promptModalBoxes: []
+      promptModalBoxes: [],
+      sessionLaunchLdapErrorMessages: {
+        'uidRootError': '',
+        'dlsStaffMemberError': '',
+        'dlsSysadminError': '',
+        'functionalAccountError': ''
+      }
     }
   },
 
@@ -186,8 +204,38 @@ export default {
               })
 
           } else {
-            // catch and feedback to the UI potential failures in launching a
-            // session
+            // give feedback to the UI regarding why launching a Hebi session
+            // failed
+            this.isSessionLaunching = false
+            this.additionalMessage = 'An error has occured when trying to ' +
+              'launch a Hebi session, please see the error message(s) below ' +
+              'for further information:'
+            this.user = resp.username
+
+            if (resp.message.indexOf('Invalid user') !== -1) {
+              if (resp.user_ldap_info.is_uid_root) {
+                this.sessionLaunchLdapErrorMessages['uidRootError'] =
+                  'Sorry, a Hebi session cannot be launched as the root user'
+              }
+
+              if (!resp.user_ldap_info.is_dls_staff_member) {
+                this.sessionLaunchLdapErrorMessages['dlsStaffMemberError'] =
+                  'Sorry, a Hebi session cannot be launched as a user that ' +
+                  'is not a member of the dls_staff group'
+              }
+
+              if (resp.user_ldap_info.is_dls_sysadmin_member) {
+                this.sessionLaunchLdapErrorMessages['dlsSysadminError'] =
+                  'Sorry, a Hebi session cannot be launched as a user that ' +
+                  'is a member of the dls_sysadmin group'
+              }
+
+              if (resp.user_ldap_info.is_functional_accounts_member) {
+                this.sessionLaunchLdapErrorMessages['functionalAccountError'] =
+                  'Sorry, a Hebi session cannot be launched as a user that ' +
+                  'is a member of the functional_accounts group'
+              }
+            }
           }
         })
     },
