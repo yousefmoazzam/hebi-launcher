@@ -517,7 +517,13 @@ def start_hebi():
 
     # create Deployment
     deployment_template = env.get_template('deployment.yaml')
-    deployment_yaml = deployment_template.render(fedid=fedid)
+    deployment_vars = {
+        'fedid': fedid,
+        'service': 'https://hebi.diamond.ac.uk/' + fedid + '/',
+        'cas_server': 'https://auth.diamond.ac.uk/cas',
+        'websocket_server': 'https://hebi.diamond.ac.uk'
+    }
+    deployment_yaml = deployment_template.render(deployment_vars)
 
     # NOTE: hardcoded namespace
     deployment_doc = yaml.safe_load(deployment_yaml)

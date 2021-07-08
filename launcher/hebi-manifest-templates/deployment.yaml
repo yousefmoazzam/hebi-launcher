@@ -62,12 +62,22 @@ spec:
         - name: web
           image: gcr.io/diamond-pubreg/hebi/web:k8s-test
           command: ["/bin/sh"]
-          args: ["/entrypoint-k8s.sh"]
+          args: ["/entrypoint.sh"]
           ports:
             - containerPort: 8080
           env:
             - name: FEDID
               value: {{ fedid }}
+            - name: ACTIVATE_CAS_AUTH
+              value: 'True'
+            - name: SERVICE
+              value: {{ service }}
+            - name: CAS_SERVER
+              value: {{ cas_server }}
+            - name: ACTIVATE_WEBSOCKET
+              value: 'True'
+            - name: WEBSOCKET_SERVER
+              value: {{ websocket_server }}
           imagePullPolicy: Always
           # for testing only
           volumeMounts:
@@ -101,6 +111,10 @@ spec:
           env:
             - name: FEDID
               value: {{ fedid }}
+            - name: SERVICE
+              value: {{ service }}
+            - name: CAS_SERVER
+              value: {{ cas_server }}
             - name: JWT_KEY
               valueFrom:
                 secretKeyRef:
