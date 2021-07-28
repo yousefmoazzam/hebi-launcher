@@ -3,6 +3,9 @@ import sys
 import jwt
 import json
 import yaml
+import signal
+import logging
+from logging.handlers import RotatingFileHandler
 from datetime import datetime
 from threading import Lock
 
@@ -62,6 +65,30 @@ INACTIVE_SESSION_CHECK_INTERVAL = 120
 #SESSION_INACTIVITY_PERIOD = 43200 # equivalent to 12 hours
 # testing value
 SESSION_INACTIVITY_PERIOD = 60
+
+APP_DIR = ''
+logger = None
+
+
+def setup_logger():
+    formatter = logging.Formatter(
+        "[%(asctime)s] {%(pathname)s:%(lineno)d} %(levelname)s - %(message)s")
+
+    if IN_CLUSTER == 'True':
+        if not os.path.exists('/tmp/log'):
+            os.mkdir('/tmp/log')
+        log_file_path = '/tmp/log/hebi-launcher.log'
+    else:
+        log_file_path = os.path.join(APP_DIR, 'log/hebi-launcher.log')
+
+    handler = RotatingFileHandler(log_file_path, maxBytes=10000000,
+                                  backupCount=5)
+    handler.setLevel(logging.INFO)
+    handler.setFormatter(formatter)
+    log = logging.getLogger('LAUNCHER')
+    log.addHandler(handler)
+    log.setLevel(logging.INFO)
+    return log
 
 
 def get_current_ingress_config():
@@ -399,6 +426,7 @@ def check_for_inactive_sessions():
             try:
                 if not check_if_pod_is_active(user):
                     # shutdown k8s resources for the user's Hebi session
+                    logger.info('%s\'s Hebi session has been inactive for a period of time longer than SESSION_INACTIVITY_PERIOD=%s seconds, shutting it down and removing all k8s resources related to this Hebi session' % (user, SESSION_INACTIVITY_PERIOD))
                     delete_hebi_k8s_resources(user)
             except KeyError as e:
                 # possibly because the launcher restarted and hasn't grabbed the
@@ -451,6 +479,7 @@ def start_hebi():
         fedid = data['fedid']
 
     user_ldap_info = get_user_ldap_info(fedid)
+    logger.info('LDAP info for %s: %s' % (fedid, user_ldap_info))
 
     # perform some checks on the requestor before a Hebi session is allowed to
     # be launched for them
@@ -510,10 +539,12 @@ def start_hebi():
     resp = k8s_api_v1.create_namespaced_service(
         body=service_doc, namespace='twi18192'
     )
+    logger.info('Service created for %s: %s' % (fedid, resp.metadata.name))
 
     # add route to this new Service to the Ingress
     ingress_config = get_current_ingress_config()
     add_route_to_ingress(ingress_config, fedid)
+    logger.info('Ingress path added for %s' % fedid)
 
     # create Deployment
     deployment_template = env.get_template('deployment.yaml')
@@ -530,6 +561,7 @@ def start_hebi():
     resp = k8s_apps_v1.create_namespaced_deployment(
         body=deployment_doc, namespace='twi18192'
     )
+    logger.info('Deployment created for %s: %s' % (fedid, resp.metadata.name))
 
     # Poll for pod status on startup
     # NOTE: hardcoded namespace
@@ -541,6 +573,7 @@ def start_hebi():
         status = event['object'].status.phase
         if status == 'Running':
             watch_pod.stop()
+            logger.info('Pod in %s\'s Deployment is now running' % fedid)
             break
 
     response = {
@@ -595,6 +628,7 @@ def delete_hebi_k8s_resources(fedid):
             name=deployment_name, namespace='twi18192', pretty='true',
             grace_period_seconds=0, propagation_policy='Background'
         )
+        logger.info('Deployment deleted for %s: %s' % (fedid, deployment_name))
 
         # delete Service
         # NOTE: hardcoded namespace
@@ -603,15 +637,18 @@ def delete_hebi_k8s_resources(fedid):
             name=service_name, namespace='twi18192', pretty='true',
             grace_period_seconds=0, propagation_policy='Background'
         )
+        logger.info('Service deleted for %s: %s' % (fedid, service_name))
 
         # remove route to this deleted Service from the Ingress
         ingress_config = get_current_ingress_config()
         remove_route_from_ingress(ingress_config, fedid)
+        logger.info('Ingress path removed for %s' % fedid)
 
         log_session_stop['was_session_stopped'] = True
         log_session_stop['did_session_exist'] = True
     except ApiException as ae:
-        print('Something went wrong with stopping a Hebi session when interacting with k8s')
+        logger.error('Something went wrong with stopping a Hebi session when interacting with k8s: ' + str(ae))
+        print('Something went wrong with stopping a Hebi session when interacting with k8s: ' + str(ae))
         if ae.reason == 'Not Found':
             log_session_stop['did_session_exist'] = False
 
@@ -620,8 +657,9 @@ def delete_hebi_k8s_resources(fedid):
 
 def main(argv):
     global IN_CLUSTER, k8s_apps_v1, k8s_api_v1, k8s_api_networking_v1beta1, \
-        env, ldap_server, all_sessions_activity, thread_lock
+        env, ldap_server, all_sessions_activity, thread_lock, logger, APP_DIR
 
+    APP_DIR = os.path.dirname(os.path.abspath(__file__))
     IN_CLUSTER = os.environ['IN_CLUSTER']
 
     if IN_CLUSTER == 'True':
@@ -635,12 +673,21 @@ def main(argv):
         k8s_apps_v1 = client.AppsV1Api(client.ApiClient(configuration=configuration))
         k8s_api_v1 = client.CoreV1Api(client.ApiClient(configuration=configuration))
 
+    logger = setup_logger()
+    logger.info('Hebi launcher has started running')
+
+    signal.signal(signal.SIGINT, exit_handler)
+
     # start socketio background tasks
     heartbeat_poll_thread = socketio.start_background_task(check_all_sessions_activity)
     inactive_session_check_thread = socketio.start_background_task(check_for_inactive_sessions)
 
     socketio.run(app, host='0.0.0.0', port=8085, debug=True, use_reloader=True)
 
+def exit_handler(signal, frame):
+    logger.info('Hebi launcher is stopping, exiting flask server')
+    print('Hebi launcher is stopping, exiting flask server')
+    sys.exit(0)
 
 if __name__ == '__main__':
     main(sys.argv[1:])
