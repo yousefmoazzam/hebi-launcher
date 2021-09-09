@@ -17,7 +17,9 @@ WORKDIR /var/cache/nginx/
 COPY ./package*.json ./
 RUN npm install
 
-COPY ./nginx-confs/nginx-k8s.conf /etc/nginx/conf.d
+COPY ./nginx-confs/nginx-k8s.conf /etc/nginx/conf.d/default.conf
+COPY ./index.html .
+COPY ./login.html .
 COPY ./webpack.config.js .
 COPY ./postcss.config.js .
 COPY ./src ./src
