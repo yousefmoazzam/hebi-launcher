@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: hebi-{{ fedid }}
-  namespace: twi18192
+  namespace: hebi
 spec:
   selector:
     matchLabels:
@@ -13,6 +13,7 @@ spec:
       labels:
         app: hebi-{{ fedid }}
     spec:
+      serviceAccountName: hebi
       securityContext:
         runAsUser: {{ uid }}
         runAsGroup: {{ gid }}
@@ -25,25 +26,18 @@ spec:
           hostPath:
             path: /home
             type: Directory
-        - name: custom-savu
-          hostPath:
-            # my own Savu repo, for testing
-            path: /dls/science/users/twi18192/Savu_param_k8s
-            type: Directory
-        - name: custom-hebi-web
-          hostPath:
-            # my own hebi-web repo, for testing
-            path: /home/twi18192/wc/hebi/web/config/www
-            type: Directory
       containers:
         - name: api
-          image: gcr.io/diamond-pubreg/hebi/api:k8s-test
+          image: gcr.io/diamond-pubreg/hebi/api:prod-savu-lite-4.0_2021.09-py37_0
           command: ["/bin/bash"]
-          args: ["/webservice/run_lite.sh"]
+          args: ["/webservice/run.sh"]
           securityContext:
             privileged: false
           ports:
             - containerPort: 5000
+          env:
+            - name: FEDID
+              value: {{ fedid }}
           volumeMounts:
             - mountPath: /files/dls
               name: dls
@@ -51,16 +45,9 @@ spec:
             - mountPath: /files/home
               name: home
               mountPropagation: HostToContainer
-              # for testing only
-            - mountPath: /custom-savu
-              name: custom-savu
-              mountPropagation: HostToContainer
-          env:
-            - name: SAVUHOME
-              value: /custom-savu
           imagePullPolicy: Always
         - name: web
-          image: gcr.io/diamond-pubreg/hebi/web:k8s-test
+          image: gcr.io/diamond-pubreg/hebi/web:prod-nginx-gzip
           command: ["/bin/sh"]
           args: ["/entrypoint.sh"]
           ports:
@@ -79,13 +66,8 @@ spec:
             - name: WEBSOCKET_SERVER
               value: {{ websocket_server }}
           imagePullPolicy: Always
-          # for testing only
-          volumeMounts:
-            - mountPath: /var/cache/nginx/config/www
-              name: custom-hebi-web
-              mountPropagation: HostToContainer
         - name: file-browser-server
-          image: gcr.io/diamond-pubreg/hebi/file-browser-server:k8s-test
+          image: gcr.io/diamond-pubreg/hebi/file-browser-server:format-flag
           command: ["npm"]
           args: ["start"]
           ports:
@@ -100,10 +82,13 @@ spec:
               name: home
               mountPropagation: HostToContainer
           imagePullPolicy: Always
+          env:
+            - name: NODE_ENV
+              value: production
         - name: cas-authenticator
-          image: gcr.io/diamond-pubreg/hebi/cas-authenticator:k8s-test
+          image: gcr.io/diamond-pubreg/hebi/cas-authenticator:prod-bjoern
           command: ["python3.7"]
-          args: ["cas-authenticator.py"]
+          args: ["cas-auth.py"]
           ports:
             - containerPort: 8090
           securityContext:

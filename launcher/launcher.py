@@ -98,7 +98,7 @@ def get_current_ingress_config():
     '''
     # get Ingress details
     ingress = k8s_api_networking_v1beta1.list_namespaced_ingress(
-        namespace='twi18192', pretty='true'
+        namespace='hebi', pretty='true'
     )
 
     # get apiVersion
@@ -153,8 +153,7 @@ def add_route_to_ingress(ingress_config, fedid):
     '''
 
     # define vars for modifying ingress
-    # NOTE: the namespace will need to be changed for running in production
-    namespace = 'twi18192'
+    namespace = 'hebi'
     field_manager = 'hebi-launcher'
 
     route = {
@@ -213,8 +212,7 @@ def remove_route_from_ingress(ingress_config, fedid):
     '''
 
     # define vars for modifying ingress
-    # NOTE: the namespace will need to be changed for running in production
-    namespace = 'twi18192'
+    namespace = 'hebi'
     field_manager = 'hebi-launcher'
 
     paths = ingress_config['spec']['rules'][0]['http']['paths']
@@ -396,8 +394,7 @@ def get_all_running_user_pods():
     '''
     Get a list of all the users who have Hebi Pods currently running
     '''
-    # NOTE: hardcoded namespace
-    all_pods = k8s_api_v1.list_namespaced_pod(namespace='twi18192')
+    all_pods = k8s_api_v1.list_namespaced_pod(namespace='hebi')
     all_users_with_running_pods = []
     for pod in all_pods.items:
         # exclude Pods that are in the process of shutting down
@@ -524,16 +521,15 @@ def start_hebi():
     else:
         uid = data['uid']
 
-    # NOTE: hardcoded namespace
     # check if the user already has a session running before attempting to
     # launch one
     user_pods = k8s_api_v1.list_namespaced_pod(
-            namespace='twi18192',
+            namespace='hebi',
             label_selector='app={}'.format('hebi-' + fedid))
     is_user_pod_present = (user_pods.items != [])
 
     user_services = k8s_api_v1.list_namespaced_service(
-            namespace='twi18192',
+            namespace='hebi',
             field_selector='metadata.name={}'.format('hebi-service-' + fedid))
     is_user_service_present = (user_services.items != [])
 
@@ -550,11 +546,10 @@ def start_hebi():
     service_template = env.get_template('service.yaml')
     service_yaml = service_template.render(fedid=fedid)
 
-    # NOTE: hardcoded namespace
     service_doc = yaml.safe_load(service_yaml)
     try:
         resp = k8s_api_v1.create_namespaced_service(
-            body=service_doc, namespace='twi18192'
+            body=service_doc, namespace='hebi'
         )
         logger.info(f"Service created for {fedid}: {resp.metadata.name}")
     except ApiException as ae:
@@ -571,17 +566,18 @@ def start_hebi():
     deployment_template = env.get_template('deployment.yaml')
     deployment_vars = {
         'fedid': fedid,
+        'uid': uid,
+        'gid': uid,
         'service': 'https://hebi.diamond.ac.uk/' + fedid + '/',
         'cas_server': 'https://auth.diamond.ac.uk/cas',
         'websocket_server': 'https://hebi.diamond.ac.uk'
     }
     deployment_yaml = deployment_template.render(deployment_vars)
 
-    # NOTE: hardcoded namespace
     deployment_doc = yaml.safe_load(deployment_yaml)
     try:
         resp = k8s_apps_v1.create_namespaced_deployment(
-            body=deployment_doc, namespace='twi18192'
+            body=deployment_doc, namespace='hebi'
         )
         logger.info(f"Deployment created for {fedid}: {resp.metadata.name}")
     except ApiException as ae:
@@ -591,11 +587,10 @@ def start_hebi():
         print(err_str)
 
     # Poll for pod status on startup
-    # NOTE: hardcoded namespace
     watch_pod = watch.Watch()
     for event in watch_pod.stream(
             k8s_api_v1.list_namespaced_pod,
-            namespace='twi18192',
+            namespace='hebi',
             label_selector='app={}'.format('hebi-' + fedid)):
         status = event['object'].status.phase
         if status == 'Running':
@@ -649,19 +644,17 @@ def delete_hebi_k8s_resources(fedid):
     }
     try:
         # delete Deployment
-        # NOTE: hardcoded namespace
         deployment_name = 'hebi-' + fedid
         resp = k8s_apps_v1.delete_namespaced_deployment(
-            name=deployment_name, namespace='twi18192', pretty='true',
+            name=deployment_name, namespace='hebi', pretty='true',
             grace_period_seconds=0, propagation_policy='Background'
         )
         logger.info(f"Deployment deleted for {fedid}: {deployment_name}")
 
         # delete Service
-        # NOTE: hardcoded namespace
         service_name = 'hebi-service-' + fedid
         resp = k8s_api_v1.delete_namespaced_service(
-            name=service_name, namespace='twi18192', pretty='true',
+            name=service_name, namespace='hebi', pretty='true',
             grace_period_seconds=0, propagation_policy='Background'
         )
         logger.info(f"Service deleted for {fedid}: {service_name}")
