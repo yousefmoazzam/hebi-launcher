@@ -58,11 +58,9 @@ spec:
               name: launcher-code
               mountPropagation: HostToContainer
         - name: cas-auth
-          image: gcr.io/diamond-pubreg/hebi/flask-launcher/cas-auth:k8s-test-jwt-secret
-    #      command: ["python3.7"]
-    #      args: ["cas-auth.py"]
-          command: ["/bin/sh"]
-          args: ["-c", "while true; do sleep 10; done"]
+          image: gcr.io/diamond-pubreg/hebi/flask-launcher/cas-auth:prod
+          command: ["python3.7"]
+          args: ["cas-auth.py"]
           ports:
             - containerPort: 8086
           imagePullPolicy: Always
@@ -72,6 +70,8 @@ spec:
               name: cas-auth-code
               mountPropagation: HostToContainer
           env:
+            - name: FLASK_MODE
+              value: 'production'
             - name: JWT_KEY
               valueFrom:
                 secretKeyRef:

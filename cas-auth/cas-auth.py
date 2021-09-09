@@ -117,8 +117,12 @@ def validate_ticket():
 
 def main(argv):
 
-    app.run(host='0.0.0.0', port=8086, debug=True, use_reloader=True,
-        threaded=True)
+    if os.environ['FLASK_MODE'] == 'production':
+        import bjoern
+        bjoern.run(app, '127.0.0.1', port=8086)
+    else:
+        app.run(host='0.0.0.0', port=8086, debug=True, use_reloader=True,
+            threaded=True)
 
 
 if __name__ == '__main__':
