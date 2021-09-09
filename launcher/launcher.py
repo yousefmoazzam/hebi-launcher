@@ -201,7 +201,10 @@ def add_route_to_ingress(ingress_config, fedid):
         )
         logger.info(f"Ingress path added for {fedid}")
     except ApiException as ae:
-        print("Exception when calling ExtensionsV1beta1Api->patch_namespaced_ingress: %s\n" % ae)
+        err_str = f"Exception when calling " \
+                  f"ExtensionsV1beta1Api->patch_namespaced_ingress: {str(ae)}"
+        logger.error(err_str)
+        print(err_str)
 
 
 def remove_route_from_ingress(ingress_config, fedid):
@@ -278,7 +281,10 @@ def remove_route_from_ingress(ingress_config, fedid):
         )
         logger.info(f"Ingress path removed for {fedid}")
     except ApiException as ae:
-        print("Exception when calling ExtensionsV1beta1Api->patch_namespaced_ingress: %s\n" % ae)
+        err_str = f"Exception when calling " \
+                  f"ExtensionsV1beta1Api->patch_namespaced_ingress: {str(ae)}"
+        logger.error(err_str)
+        print(err_str)
 
 
 def get_user_ldap_info(fedid):
@@ -428,15 +434,23 @@ def check_for_inactive_sessions():
             try:
                 if not check_if_pod_is_active(user):
                     # shutdown k8s resources for the user's Hebi session
-                    logger.info('%s\'s Hebi session has been inactive for a period of time longer than SESSION_INACTIVITY_PERIOD=%s seconds, shutting it down and removing all k8s resources related to this Hebi session' % (user, SESSION_INACTIVITY_PERIOD))
+                    info_str = f"{user}'s Hebi session has been inactive " \
+                               f"for a period of time longer than "\
+                               f"SESSION_INACTIVITY_PERIOD=" \
+                               f"{SESSION_INACTIVITY_PERIOD} seconds; " \
+                               f"shutting it down and removing all k8s " \
+                               f"resources related to this Hebi session."
+                    logger.info(info_str)
                     delete_hebi_k8s_resources(user)
             except KeyError as e:
                 # possibly because the launcher restarted and hasn't grabbed the
                 # latest heartbeat-response, so there should be some mechanism
                 # to allow for a few bad attempts like this before deleting the
                 # session, sicne the launcher may have just restarted
-                print(e)
-                print('%s\'s hebi session wasn\'t found in all_sessions_activity' % user)
+                err_str = f"{user}'s Hebi session wasn't found in " \
+                          f"all_sessions_activity: {str(e)}"
+                logger.error(err_str)
+                print(err_str)
             thread_lock.release()
         socketio.sleep(INACTIVE_SESSION_CHECK_INTERVAL)
 
@@ -481,7 +495,7 @@ def start_hebi():
         fedid = data['fedid']
 
     user_ldap_info = get_user_ldap_info(fedid)
-    logger.info('LDAP info for %s: %s' % (fedid, user_ldap_info))
+    logger.info(f"LDAP info for {fedid}: {user_ldap_info}")
 
     # perform some checks on the requestor before a Hebi session is allowed to
     # be launched for them
@@ -586,7 +600,7 @@ def start_hebi():
         status = event['object'].status.phase
         if status == 'Running':
             watch_pod.stop()
-            logger.info('Pod in %s\'s Deployment is now running' % fedid)
+            logger.info(f"Pod in {fedid}'s Deployment is now running")
             break
 
     response = {
@@ -641,7 +655,7 @@ def delete_hebi_k8s_resources(fedid):
             name=deployment_name, namespace='twi18192', pretty='true',
             grace_period_seconds=0, propagation_policy='Background'
         )
-        logger.info('Deployment deleted for %s: %s' % (fedid, deployment_name))
+        logger.info(f"Deployment deleted for {fedid}: {deployment_name}")
 
         # delete Service
         # NOTE: hardcoded namespace
@@ -650,7 +664,7 @@ def delete_hebi_k8s_resources(fedid):
             name=service_name, namespace='twi18192', pretty='true',
             grace_period_seconds=0, propagation_policy='Background'
         )
-        logger.info('Service deleted for %s: %s' % (fedid, service_name))
+        logger.info(f"Service deleted for {fedid}: {service_name}")
 
         # remove route to this deleted Service from the Ingress
         ingress_config = get_current_ingress_config()
@@ -659,8 +673,10 @@ def delete_hebi_k8s_resources(fedid):
         log_session_stop['was_session_stopped'] = True
         log_session_stop['did_session_exist'] = True
     except ApiException as ae:
-        logger.error('Something went wrong with stopping a Hebi session when interacting with k8s: ' + str(ae))
-        print('Something went wrong with stopping a Hebi session when interacting with k8s: ' + str(ae))
+        err_str = f"Something went wrong with stopping a Hebi session when " \
+                  f"interacting with k8s: {str(ae)}"
+        logger.error(err_str)
+        print(err_str)
         if ae.reason == 'Not Found':
             log_session_stop['did_session_exist'] = False
 
