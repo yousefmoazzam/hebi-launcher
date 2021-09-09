@@ -682,7 +682,11 @@ def main(argv):
     heartbeat_poll_thread = socketio.start_background_task(check_all_sessions_activity)
     inactive_session_check_thread = socketio.start_background_task(check_for_inactive_sessions)
 
-    socketio.run(app, host='0.0.0.0', port=8085, debug=True, use_reloader=True)
+    if os.environ['FLASK_MODE'] == 'production':
+        socketio.run(app, host='127.0.0.1', port=8085)
+    else:
+        socketio.run(app, host='0.0.0.0', port=8085, debug=True,
+                     use_reloader=True)
 
 def exit_handler(signal, frame):
     logger.info('Hebi launcher is stopping, exiting flask server')

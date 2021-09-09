@@ -36,14 +36,14 @@ spec:
             type: Directory
       containers:
         - name: launcher
-          image: gcr.io/diamond-pubreg/hebi/flask-launcher/launcher:k8s-test-rename-hebi-templates
-    #      command: ["python3.7"]
-    #      args: ["launcher.py"]
-          command: ["/bin/sh"]
-          args: ["-c", "while true; do sleep 10; done"]
+          image: gcr.io/diamond-pubreg/hebi/flask-launcher/launcher:prod
+          command: ["python3.7"]
+          args: ["launcher.py"]
           ports:
             - containerPort: 8085
           env:
+            - name: FLASK_MODE
+              value: 'production'
             - name: IN_CLUSTER
               value: 'True'
             - name: JWT_KEY
