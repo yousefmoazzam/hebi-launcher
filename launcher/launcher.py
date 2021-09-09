@@ -199,6 +199,7 @@ def add_route_to_ingress(ingress_config, fedid):
             'hebi-ingress', namespace, ingress_config, pretty='true',
             field_manager=field_manager
         )
+        logger.info(f"Ingress path added for {fedid}")
     except ApiException as ae:
         print("Exception when calling ExtensionsV1beta1Api->patch_namespaced_ingress: %s\n" % ae)
 
@@ -275,6 +276,7 @@ def remove_route_from_ingress(ingress_config, fedid):
             'hebi-ingress', namespace, ingress_config, pretty='true',
             field_manager=field_manager
         )
+        logger.info(f"Ingress path removed for {fedid}")
     except ApiException as ae:
         print("Exception when calling ExtensionsV1beta1Api->patch_namespaced_ingress: %s\n" % ae)
 
@@ -536,15 +538,20 @@ def start_hebi():
 
     # NOTE: hardcoded namespace
     service_doc = yaml.safe_load(service_yaml)
-    resp = k8s_api_v1.create_namespaced_service(
-        body=service_doc, namespace='twi18192'
-    )
-    logger.info('Service created for %s: %s' % (fedid, resp.metadata.name))
+    try:
+        resp = k8s_api_v1.create_namespaced_service(
+            body=service_doc, namespace='twi18192'
+        )
+        logger.info(f"Service created for {fedid}: {resp.metadata.name}")
+    except ApiException as ae:
+        err_str = f"Something went wrong with creating the Service for " \
+                  f"{fedid}'s Hebi session: {str(ae)}"
+        logger.error(err_str)
+        print(err_str)
 
     # add route to this new Service to the Ingress
     ingress_config = get_current_ingress_config()
     add_route_to_ingress(ingress_config, fedid)
-    logger.info('Ingress path added for %s' % fedid)
 
     # create Deployment
     deployment_template = env.get_template('deployment.yaml')
@@ -558,10 +565,16 @@ def start_hebi():
 
     # NOTE: hardcoded namespace
     deployment_doc = yaml.safe_load(deployment_yaml)
-    resp = k8s_apps_v1.create_namespaced_deployment(
-        body=deployment_doc, namespace='twi18192'
-    )
-    logger.info('Deployment created for %s: %s' % (fedid, resp.metadata.name))
+    try:
+        resp = k8s_apps_v1.create_namespaced_deployment(
+            body=deployment_doc, namespace='twi18192'
+        )
+        logger.info(f"Deployment created for {fedid}: {resp.metadata.name}")
+    except ApiException as ae:
+        err_str = f"Something went wrong with creating the Deployment for "\
+                  f"{fedid}'s Hebi session: {str(ae)}"
+        logger.error(err_str)
+        print(err_str)
 
     # Poll for pod status on startup
     # NOTE: hardcoded namespace
@@ -642,7 +655,6 @@ def delete_hebi_k8s_resources(fedid):
         # remove route to this deleted Service from the Ingress
         ingress_config = get_current_ingress_config()
         remove_route_from_ingress(ingress_config, fedid)
-        logger.info('Ingress path removed for %s' % fedid)
 
         log_session_stop['was_session_stopped'] = True
         log_session_stop['did_session_exist'] = True
