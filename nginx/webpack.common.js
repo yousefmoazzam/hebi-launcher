@@ -5,7 +5,6 @@ const path = require('path');
 const webpack = require('webpack')
 
 module.exports = {
-  mode: 'development',
   entry: {
     login: './src/login.js',
     launcher: './src/launcher.js'

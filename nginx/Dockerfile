@@ -1,5 +1,7 @@
 FROM nginxinc/nginx-unprivileged:1.20-alpine
 
+ARG WEBPACK_CONFIG=./webpack.dev.js
+
 # for installing node
 USER root
 
@@ -20,7 +22,8 @@ RUN npm install
 COPY ./nginx-confs/nginx-k8s.conf /etc/nginx/conf.d/default.conf
 COPY ./index.html .
 COPY ./login.html .
-COPY ./webpack.config.js .
+COPY ./webpack.common.js .
+COPY ${WEBPACK_CONFIG} ./webpack.config.js
 COPY ./postcss.config.js .
 COPY ./src ./src
 
