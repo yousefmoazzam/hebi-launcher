@@ -30,6 +30,12 @@ spec:
               value: 'production'
             - name: IN_CLUSTER
               value: 'True'
+            - name: ALL_SESSIONS_CHECK_INTERVAL
+              value: '20'
+            - name: INACTIVE_SESSION_CHECK_INTERVAL
+              value: '120'
+            - name: SESSION_INACTIVITY_PERIOD
+              value: '86400' # 24 hours
             - name: JWT_KEY
               valueFrom:
                 secretKeyRef:

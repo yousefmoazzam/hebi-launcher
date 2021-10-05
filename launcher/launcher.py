@@ -54,17 +54,17 @@ JWT_ALGORITHM = 'HS256'
 # magic numbers related to heartbeat service
 # the interval at which to broadcast to all Hebi sessions to check if they are
 # active, in seconds
-ALL_SESSIONS_CHECK_INTERVAL = 20
+ALL_SESSIONS_CHECK_INTERVAL = int(os.environ['ALL_SESSIONS_CHECK_INTERVAL'])
 # the interval at which to check the "last seen active timestamp" of all
 # sessions, in seconds
-INACTIVE_SESSION_CHECK_INTERVAL = 120
+INACTIVE_SESSION_CHECK_INTERVAL = int(os.environ['INACTIVE_SESSION_CHECK_INTERVAL'])
 # if a user's session has been inactive for a time longer than this value (in
 # seconds), then it will be deemed to be inactive and the associated k8s
 # resources will be deleted
 # real value
 #SESSION_INACTIVITY_PERIOD = 43200 # equivalent to 12 hours
 # testing value
-SESSION_INACTIVITY_PERIOD = 60
+SESSION_INACTIVITY_PERIOD = int(os.environ['SESSION_INACTIVITY_PERIOD'])
 
 APP_DIR = ''
 logger = None
