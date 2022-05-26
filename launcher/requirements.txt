@@ -7,3 +7,6 @@ ldap3==2.9
 Flask-SocketIO==5.0.1
 gevent==21.1.2
 gevent-websocket==0.10.1
+markupsafe==2.0.1
+itsdangerous==2.0.1
+werkzeug==2.0.3
