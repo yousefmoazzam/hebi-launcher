@@ -42,6 +42,10 @@ spec:
                   name: cas-secret
                   key: jwt-key
           imagePullPolicy: Always
+          resources:
+            limits:
+              cpu: 700m
+              memory: 200Mi
         - name: cas-auth
           image: gcr.io/diamond-pubreg/hebi/flask-launcher/cas-auth:prod
           command: ["python3.7"]
@@ -57,6 +61,10 @@ spec:
                 secretKeyRef:
                   name: cas-secret
                   key: jwt-key
+          resources:
+            limits:
+              cpu: 115m
+              memory: 50Mi
         - name: nginx
           image: gcr.io/diamond-pubreg/hebi/flask-launcher/nginx:prod
           command: ["nginx"]
@@ -64,3 +72,7 @@ spec:
           ports:
             - containerPort: 8080
           imagePullPolicy: Always
+          resources:
+            limits:
+              cpu: 115m
+              memory: 50Mi

@@ -46,6 +46,10 @@ spec:
               name: home
               mountPropagation: HostToContainer
           imagePullPolicy: Always
+          resources:
+            limits:
+              cpu: 700m
+              memory: 200Mi
         - name: web
           image: gcr.io/diamond-pubreg/hebi/web:prod-nginx-gzip
           command: ["/bin/sh"]
@@ -66,6 +70,10 @@ spec:
             - name: WEBSOCKET_SERVER
               value: {{ websocket_server }}
           imagePullPolicy: Always
+          resources:
+            limits:
+              cpu: 100m
+              memory: 50Mi
         - name: file-browser-server
           image: gcr.io/diamond-pubreg/hebi/file-browser-server:format-flag
           command: ["npm"]
@@ -85,6 +93,10 @@ spec:
           env:
             - name: NODE_ENV
               value: production
+          resources:
+            limits:
+              cpu: 150m
+              memory: 50Mi
         - name: cas-authenticator
           image: gcr.io/diamond-pubreg/hebi/cas-authenticator:prod-bjoern
           command: ["python3.7"]
@@ -106,3 +118,7 @@ spec:
                   name: cas-secret
                   key: jwt-key
           imagePullPolicy: Always
+          resources:
+            limits:
+              cpu: 115m
+              memory: 50Mi
