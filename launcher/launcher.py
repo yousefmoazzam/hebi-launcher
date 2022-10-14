@@ -39,7 +39,7 @@ k8s_apps_v1 = None
 # provides functions for creating Services
 k8s_api_v1 = None
 # provides function for modifying an Ingress
-k8s_api_networking_v1beta1 = None
+k8s_api_networking_v1 = None
 # loader for loading templates with jinja2
 env = Environment(loader=FileSystemLoader('hebi-manifest-templates'))
 
@@ -97,7 +97,7 @@ def get_current_ingress_config():
     that routes HTPP traffic for Hebi sessions
     '''
     # get Ingress details
-    ingress = k8s_api_networking_v1beta1.list_namespaced_ingress(
+    ingress = k8s_api_networking_v1.list_namespaced_ingress(
         namespace='hebi', pretty='true'
     )
 
@@ -106,8 +106,8 @@ def get_current_ingress_config():
         # get apiVersion from the very first application of the Ingress manifest
         last_ingress_api_version = ingress.items[0].metadata.managed_fields[0].api_version
     else:
-        # otherwise, assume that it's 'networking.k8s.io/v1beta1'
-        last_ingress_api_version = 'networking.k8s.io/v1beta1'
+        # otherwise, assume that it's 'networking.k8s.io/v1'
+        last_ingress_api_version = 'networking.k8s.io/v1'
 
     # get last annotations and name from the last metadata
     last_ingress_metadata = {
@@ -116,7 +116,7 @@ def get_current_ingress_config():
     }
 
     # grab spec info from spec.__repr__(), since spec by itself is not a JSON
-    # string, it's a ExtensionsV1beta1IngressSpec object
+    # string, it's a ExtensionsV1IngressSpec object
     # to make this a valid JSON string, need to:
     # - replace siongle quotes with double quotes
     # - change instances of 'None' to 'null'
@@ -124,17 +124,15 @@ def get_current_ingress_config():
     last_ingress_spec_str = ingress.items[0].spec.__repr__().replace('\'', '\"').replace('None', 'null')
     last_ingress_spec_dict = json.loads(last_ingress_spec_str)
 
-    # the service name and service port in routes are in "snake case"
-    # (underscores are separators) in the Ingress spec object, but patches
-    # require names to be in "camel case", so they need to be converted to
-    # camel case for every route found in the Ingress before trying to apply a
-    # patch
+    # the path type in routes are in "snake case" (underscores are separators)
+    # in the Ingress spec object, but patches require names to be in "camel
+    # case", so it needs to be converted to camel case for every route found in
+    # the Ingress before trying to apply a patch
     if last_ingress_spec_dict['rules'][0]['http'] is not None:
         # iterate over the dicts in the 'paths' list that represent user routes
         # and change the snake case to camel case
         for route in last_ingress_spec_dict['rules'][0]['http']['paths']:
-            route['backend']['serviceName'] = route['backend'].pop('service_name')
-            route['backend']['servicePort'] = route['backend'].pop('service_port')
+            route['pathType'] = route.pop('path_type')
 
     # put together a python dict representing the current Ingress config
     ingress_config = {
@@ -157,10 +155,15 @@ def add_route_to_ingress(ingress_config, fedid):
     field_manager = 'hebi-launcher'
 
     route = {
-        'path': '/' + fedid,
+        'path': '/' + fedid + '/',
+        'pathType': 'Prefix',
         'backend': {
-            'serviceName': 'hebi-service-' + fedid,
-            'servicePort': 8080
+            'service': {
+                'name': 'hebi-service-' + fedid,
+                'port': {
+                    'number': 8080
+                }
+            }
         }
     }
 
@@ -194,14 +197,14 @@ def add_route_to_ingress(ingress_config, fedid):
 
     # add route to Ingress resource
     try:
-        patch = k8s_api_networking_v1beta1.patch_namespaced_ingress(
+        patch = k8s_api_networking_v1.patch_namespaced_ingress(
             'hebi-ingress', namespace, ingress_config, pretty='true',
             field_manager=field_manager
         )
         logger.info(f"Ingress path added for {fedid}")
     except ApiException as ae:
         err_str = f"Exception when calling " \
-                  f"ExtensionsV1beta1Api->patch_namespaced_ingress: {str(ae)}"
+                  f"ExtensionsV1Api->patch_namespaced_ingress: {str(ae)}"
         logger.error(err_str)
         print(err_str)
 
@@ -217,7 +220,7 @@ def remove_route_from_ingress(ingress_config, fedid):
 
     paths = ingress_config['spec']['rules'][0]['http']['paths']
     for index, route in enumerate(paths):
-        if route['path'] == '/' + fedid:
+        if route['path'] == '/' + fedid + '/':
             del paths[index]
 
     # check if there are no paths left; if so, need to remove the empty
@@ -271,16 +274,16 @@ def remove_route_from_ingress(ingress_config, fedid):
         # anymore once it has been used: likely there is some other config that
         # needs to be included in the patch to keep the Ingress working, but I
         # am unsure what it is (the alternative being to include everything in
-        # a NetworkingV1beta1Ingress object):
-        # https://github.com/kubernetes-client/python/blob/master/kubernetes/docs/NetworkingV1beta1Api.md#replace_namespaced_ingress
-        patch = k8s_api_networking_v1beta1.patch_namespaced_ingress(
+        # a NetworkingV1Ingress object):
+        # https://github.com/kubernetes-client/python/blob/master/kubernetes/docs/NetworkingV1Api.md#replace_namespaced_ingress
+        patch = k8s_api_networking_v1.patch_namespaced_ingress(
             'hebi-ingress', namespace, ingress_config, pretty='true',
             field_manager=field_manager
         )
         logger.info(f"Ingress path removed for {fedid}")
     except ApiException as ae:
         err_str = f"Exception when calling " \
-                  f"ExtensionsV1beta1Api->patch_namespaced_ingress: {str(ae)}"
+                  f"ExtensionsV1Api->patch_namespaced_ingress: {str(ae)}"
         logger.error(err_str)
         print(err_str)
 
@@ -677,7 +680,7 @@ def delete_hebi_k8s_resources(fedid):
 
 
 def main(argv):
-    global IN_CLUSTER, k8s_apps_v1, k8s_api_v1, k8s_api_networking_v1beta1, \
+    global IN_CLUSTER, k8s_apps_v1, k8s_api_v1, k8s_api_networking_v1, \
         env, ldap_server, all_sessions_activity, thread_lock, logger, APP_DIR
 
     APP_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -687,7 +690,7 @@ def main(argv):
         config.load_incluster_config()
         k8s_apps_v1 = client.AppsV1Api()
         k8s_api_v1 = client.CoreV1Api()
-        k8s_api_networking_v1beta1 = client.NetworkingV1beta1Api()
+        k8s_api_networking_v1 = client.NetworkingV1Api()
     else:
         configuration = client.Configuration()
         configuration.host = "http://localhost:8090"
