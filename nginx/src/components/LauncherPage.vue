@@ -86,6 +86,10 @@ export default {
       return this.hebiHost + this.user + '/'
     },
 
+    hebiSessionRootDirUrl: function () {
+      return this.hebiHost + this.user + '/files/storage/local/list?path=/'
+    },
+
     userSessionStatus: function () {
       if (this.fetchingUserSessionStatus) {
         return 'fetching...'
@@ -120,10 +124,10 @@ export default {
 
     checkHebiUrlStatus: function (resolve) {
       // function for polling the user's Hebi session
-      fetch(this.hebiSessionUrl)
+      fetch(this.hebiSessionRootDirUrl)
       .then(resp => {
-        if (resp.status === 502 || resp.status === 404) {
-          console.log('keep polling, bad gateway 502 or 404 still due to Ingress nginx config not taking effect yet')
+        if (resp.status !== 200) {
+          console.log('Keep polling, not getting a 200 from the file browser server yet')
           setTimeout(this.checkHebiUrlStatus.bind(this, resolve), 2000)
         } else {
           this.additionalMessage = 'Thank you for waiting ' + this.user +
