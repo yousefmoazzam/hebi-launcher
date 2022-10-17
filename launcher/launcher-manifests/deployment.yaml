@@ -20,7 +20,7 @@ spec:
         runAsGroup: 37820
       containers:
         - name: launcher
-          image: gcr.io/diamond-pubreg/hebi/flask-launcher/launcher:1.0.1
+          image: gcr.io/diamond-pubreg/hebi/flask-launcher/launcher:1.0.2
           command: ["python3.7"]
           args: ["launcher.py"]
           ports:

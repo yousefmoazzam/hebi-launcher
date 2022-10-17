@@ -31,8 +31,6 @@ spec:
           image: gcr.io/diamond-pubreg/hebi/api:prod-savu-lite-4.0_2021.09-py37_0
           command: ["/bin/bash"]
           args: ["/webservice/run.sh"]
-          securityContext:
-            privileged: false
           ports:
             - containerPort: 5000
           env:
@@ -80,8 +78,6 @@ spec:
           args: ["start"]
           ports:
             - containerPort: 8081
-          securityContext:
-            privileged: false
           volumeMounts:
             - mountPath: /files/dls
               name: dls
@@ -103,8 +99,6 @@ spec:
           args: ["cas-auth.py"]
           ports:
             - containerPort: 8090
-          securityContext:
-            privileged: false
           env:
             - name: FEDID
               value: {{ fedid }}
