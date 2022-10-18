@@ -5,6 +5,7 @@ import json
 import yaml
 import signal
 import logging
+import pickle
 from logging.handlers import RotatingFileHandler
 from datetime import datetime
 from threading import Lock
@@ -62,9 +63,11 @@ INACTIVE_SESSION_CHECK_INTERVAL = int(os.environ['INACTIVE_SESSION_CHECK_INTERVA
 # seconds), then it will be deemed to be inactive and the associated k8s
 # resources will be deleted
 # real value
-#SESSION_INACTIVITY_PERIOD = 43200 # equivalent to 12 hours
-# testing value
-SESSION_INACTIVITY_PERIOD = int(os.environ['SESSION_INACTIVITY_PERIOD'])
+SESSION_INACTIVITY_PERIOD_HRS = int(os.environ['SESSION_INACTIVITY_PERIOD_HRS'])
+SESSION_INACTIVITY_PERIOD_DAYS = int(os.environ['SESSION_INACTIVITY_PERIOD_DAYS'])
+# the interval at which to write the all_sessions_activity dict to file
+WRITE_SESSION_ACTIVITY_INTERVAL = 300
+SESSION_ACTIVITY_FILE_PATH = '/persistent_data/all_sessions_activity.pkl'
 
 APP_DIR = ''
 logger = None
@@ -415,7 +418,9 @@ def check_if_pod_is_active(fedid):
     last_response = all_sessions_activity[fedid]
     current_time = datetime.now()
     difference = current_time - last_response
-    if difference.seconds < SESSION_INACTIVITY_PERIOD:
+    if difference.seconds + difference.days * 60 * 60 * 24 < \
+            SESSION_INACTIVITY_PERIOD_HRS * 60 * 60 + \
+            SESSION_INACTIVITY_PERIOD_DAYS * 60 * 60 * 24:
         return True
     else:
         return False
@@ -436,8 +441,10 @@ def check_for_inactive_sessions():
                     # shutdown k8s resources for the user's Hebi session
                     info_str = f"{user}'s Hebi session has been inactive " \
                                f"for a period of time longer than "\
-                               f"SESSION_INACTIVITY_PERIOD=" \
-                               f"{SESSION_INACTIVITY_PERIOD} seconds; " \
+                               f"SESSION_INACTIVITY_PERIOD_DAYS=" \
+                               f"{SESSION_INACTIVITY_PERIOD_DAYS} days and " \
+                               f"SESSION_INACTIVITY_PERIOD_HRS=" \
+                               f"{SESSION_INACTIVITY_PERIOD_HRS} hours;" \
                                f"shutting it down and removing all k8s " \
                                f"resources related to this Hebi session."
                     logger.info(info_str)
@@ -453,6 +460,19 @@ def check_for_inactive_sessions():
                 print(err_str)
             thread_lock.release()
         socketio.sleep(INACTIVE_SESSION_CHECK_INTERVAL)
+
+
+def write_session_activity_to_file():
+    """
+    Periodically write the `all_sessions_activity` dict to file, so then its
+    information can persist over restarts of the launcher app, and thus
+    inactive sessions can be detected correctly even if the launcher app
+    restarts.
+    """
+    while True:
+        with open(SESSION_ACTIVITY_FILE_PATH, 'wb') as f:
+            pickle.dump(all_sessions_activity, f)
+        socketio.sleep(WRITE_SESSION_ACTIVITY_INTERVAL)
 
 
 @app.route('/k8s/session_info')
@@ -668,6 +688,9 @@ def delete_hebi_k8s_resources(fedid):
 
         log_session_stop['was_session_stopped'] = True
         log_session_stop['did_session_exist'] = True
+
+        # remove the user's session timestamp info from all_sessions_activity
+        all_sessions_activity.pop(fedid, None)
     except ApiException as ae:
         err_str = f"Something went wrong with stopping a Hebi session when " \
                   f"interacting with k8s: {str(ae)}"
@@ -698,6 +721,18 @@ def main(argv):
         k8s_api_v1 = client.CoreV1Api(client.ApiClient(configuration=configuration))
 
     logger = setup_logger()
+
+    # attempt to load data from SESSION_ACTIVITY_FILE_PATH into
+    # all_sessions_activity
+    try:
+        with open(SESSION_ACTIVITY_FILE_PATH, 'rb') as f:
+            previous_all_sessions_activity = pickle.load(f)
+            logger.info(f"Current session timestamps are {all_sessions_activity}, updating all_sessions_activity with timestamps from previous launcher Pod...")
+            all_sessions_activity.update(previous_all_sessions_activity)
+            logger.info(f"Updated session timestamps are {all_sessions_activity}")
+    except FileNotFoundError as e:
+        logger.info(f"Didn't find any file at {SESSION_ACTIVITY_FILE_PATH}, assuming that no previous session timestamps exists")
+
     logger.info('Hebi launcher has started running')
 
     signal.signal(signal.SIGINT, exit_handler)
@@ -705,6 +740,8 @@ def main(argv):
     # start socketio background tasks
     heartbeat_poll_thread = socketio.start_background_task(check_all_sessions_activity)
     inactive_session_check_thread = socketio.start_background_task(check_for_inactive_sessions)
+    write_session_activity_to_file_thread = socketio.start_background_task(
+        write_session_activity_to_file)
 
     if os.environ['FLASK_MODE'] == 'production':
         socketio.run(app, host='127.0.0.1', port=8085)

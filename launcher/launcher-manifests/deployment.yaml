@@ -18,9 +18,13 @@ spec:
         # k8s-hebi user
         runAsUser: 37676
         runAsGroup: 37820
+      volumes:
+        - name: session-activity-volume
+          persistentVolumeClaim:
+            claimName: session-activity-claim
       containers:
         - name: launcher
-          image: gcr.io/diamond-pubreg/hebi/flask-launcher/launcher:1.0.2
+          image: gcr.io/diamond-pubreg/hebi/flask-launcher/launcher:1.0.3
           command: ["python3.7"]
           args: ["launcher.py"]
           ports:
@@ -34,8 +38,10 @@ spec:
               value: '20'
             - name: INACTIVE_SESSION_CHECK_INTERVAL
               value: '120'
-            - name: SESSION_INACTIVITY_PERIOD
-              value: '86400' # 24 hours
+            - name: SESSION_INACTIVITY_PERIOD_HRS
+              value: '0'
+            - name: SESSION_INACTIVITY_PERIOD_DAYS
+              value: '1'
             - name: JWT_KEY
               valueFrom:
                 secretKeyRef:
@@ -46,6 +52,9 @@ spec:
             limits:
               cpu: 700m
               memory: 200Mi
+          volumeMounts:
+            - mountPath: "/persistent_data"
+              name: session-activity-volume
         - name: cas-auth
           image: gcr.io/diamond-pubreg/hebi/flask-launcher/cas-auth:prod
           command: ["python3.7"]
