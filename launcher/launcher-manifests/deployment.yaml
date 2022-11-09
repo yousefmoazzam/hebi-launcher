@@ -24,7 +24,7 @@ spec:
             claimName: session-activity-claim
       containers:
         - name: launcher
-          image: gcr.io/diamond-pubreg/hebi/flask-launcher/launcher:1.0.3
+          image: gcr.io/diamond-pubreg/hebi/flask-launcher/launcher:1.0.4
           command: ["python3.7"]
           args: ["launcher.py"]
           ports:

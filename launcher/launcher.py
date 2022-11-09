@@ -158,7 +158,7 @@ def add_route_to_ingress(ingress_config, fedid):
     field_manager = 'hebi-launcher'
 
     route = {
-        'path': '/' + fedid + '/',
+        'path': f"/{fedid}(/|$)(.*)",
         'pathType': 'Prefix',
         'backend': {
             'service': {
@@ -174,26 +174,8 @@ def add_route_to_ingress(ingress_config, fedid):
     # not, need to first add it before appending the route
     if ingress_config['spec']['rules'][0]['http'] is None:
         ingress_config['spec']['rules'][0]['http'] = {
-            'paths': []        
+            'paths': []
         }
-
-    rewrite_annotation = 'serviceName=hebi-service-' + fedid + ' rewrite=/'
-    # check if the Ingress has the 'nginx.org/rewrites' annotation defined; if
-    # not, need to first add it before appending the rewrite annotation for the
-    # given user
-    if 'nginx.org/rewrites' not in ingress_config['metadata']['annotations']:
-        ingress_config['metadata']['annotations']['nginx.org/rewrites'] = rewrite_annotation
-    else:
-        rewrites_string = ingress_config['metadata']['annotations']['nginx.org/rewrites']
-        rewrite_annotations = rewrites_string.split(';')
-        # NOTE: see the note in remove_route_from_ingress() about the bug when
-        # using patch_namespaced_ingress() and the 'nginx.org/rewrites' is
-        # needing to be changed from having one rewrite-rule to having no
-        # rewrite-rules (due to the single user with a Hebi session closing
-        # their session)
-        if rewrite_annotation not in rewrite_annotations:
-            rewrite_annotations.append(rewrite_annotation)
-            ingress_config['metadata']['annotations']['nginx.org/rewrites'] = ';'.join(rewrite_annotations)
 
     # add route to dict
     ingress_config['spec']['rules'][0]['http']['paths'].append(route)
@@ -223,7 +205,7 @@ def remove_route_from_ingress(ingress_config, fedid):
 
     paths = ingress_config['spec']['rules'][0]['http']['paths']
     for index, route in enumerate(paths):
-        if route['path'] == '/' + fedid + '/':
+        if route['path'] == f"/{fedid}(/|$)(.*)":
             del paths[index]
 
     # check if there are no paths left; if so, need to remove the empty
@@ -231,28 +213,8 @@ def remove_route_from_ingress(ingress_config, fedid):
     # having an empty list of paths, nor an empty dict for http
     if len(paths) == 0:
         ingress_config['spec']['rules'][0] = {
-            'host': 'hebi.diamond.ac.uk'        
+            'host': 'hebi.diamond.ac.uk'
         }
-
-    # remove rewrite annotation
-    rewrite_annotation = 'serviceName=hebi-service-' + fedid + ' rewrite=/'
-    # check if the Ingress has the 'nginx.org/rewrites' annotation defined (a
-    # "stop" request may accidentally be issued when the user has no session
-    # running!); if not, need to first add it before appending the rewrite
-    # annotation for the given user
-    if 'nginx.org/rewrites' not in ingress_config['metadata']['annotations']:
-        print('no annotation to remove for fedid %s' % fedid)
-    else:
-        rewrites_string = ingress_config['metadata']['annotations']['nginx.org/rewrites']
-        rewrite_annotations = rewrites_string.split(';')
-        rewrite_annotations.remove(rewrite_annotation)
-        # check if there are no rewrite annotations left after having removed
-        # the one for the given fedid; if so, remove the `nginx.org/rewrites`
-        # key entirely
-        if len(rewrite_annotations) == 0:
-            del ingress_config['metadata']['annotations']['nginx.org/rewrites']
-        else:
-            ingress_config['metadata']['annotations']['nginx.org/rewrites'] = ';'.join(rewrite_annotations)
 
     # remove route
     try:
